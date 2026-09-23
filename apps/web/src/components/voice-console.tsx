@@ -73,9 +73,15 @@ export function VoiceConsole() {
   const [liveKitSummary, setLiveKitSummary] = useState("Not connected");
   const [backendSummary, setBackendSummary] = useState("mock");
   const roomRef = useRef<unknown>(null);
+  const stateRef = useRef(state);
   const speechAbortRef = useRef<AbortController | null>(null);
   const recognitionRef = useRef<BrowserRecognition | null>(null);
   const activeUtterances = useRef<SpeechSynthesisUtterance[]>([]);
+  const turnCounterRef = useRef(0);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     void fetch(`${API_BASE}/v1/config`)
@@ -172,6 +178,10 @@ export function VoiceConsole() {
       });
       room.on(livekit.RoomEvent.Disconnected, () => {
         setLiveKitSummary("Disconnected");
+        const activeSessionId = stateRef.current.sessionId;
+        if (activeSessionId) {
+          void fetch(`${API_BASE}/v1/session/${activeSessionId}`, { method: "DELETE" }).catch(() => undefined);
+        }
         dispatch({ type: "session.ended" });
       });
       room.on(livekit.RoomEvent.TrackSubscribed, async () => {
@@ -217,7 +227,8 @@ export function VoiceConsole() {
       dispatch({ type: "error.set", error: `Speech recognition error: ${event.error}` });
     };
     recognition.onend = () => {
-      if (state.sessionId && state.status !== "speaking") {
+      const currentState = stateRef.current;
+      if (currentState.sessionId && currentState.status !== "speaking") {
         dispatch({ type: "status.set", status: "listening" });
       }
     };
@@ -227,7 +238,8 @@ export function VoiceConsole() {
   }
 
   async function handleTranscript(result: RecognitionResult) {
-    if (!state.sessionId) return;
+    const sessionId = stateRef.current.sessionId;
+    if (!sessionId) return;
     const transcript = result.finalText.trim();
     if (!transcript) return;
 
@@ -235,15 +247,16 @@ export function VoiceConsole() {
     dispatch({ type: "transcript.add", entry: { id: makeId(), role: "user", text: transcript } });
     dispatch({ type: "status.set", status: "thinking" });
 
-    speechAbortRef.current?.abort();
-    speechAbortRef.current = new AbortController();
+    const turnId = ++turnCounterRef.current;
+    const requestAbortController = new AbortController();
+    speechAbortRef.current = requestAbortController;
 
     const response = await fetch(`${API_BASE}/v1/mock/respond`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      signal: speechAbortRef.current.signal,
+      signal: requestAbortController.signal,
       body: JSON.stringify({
-        session_id: state.sessionId,
+        session_id: sessionId,
         transcript,
       }),
     }).catch((error: Error) => {
@@ -256,6 +269,9 @@ export function VoiceConsole() {
     if (!response) {
       return;
     }
+    if (speechAbortRef.current !== requestAbortController || turnCounterRef.current !== turnId) {
+      return;
+    }
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({ detail: response.statusText }));
@@ -264,18 +280,26 @@ export function VoiceConsole() {
     }
 
     const json = (await response.json()) as MockReplyResponse;
+    if (speechAbortRef.current !== requestAbortController || turnCounterRef.current !== turnId) {
+      return;
+    }
     setBackendSummary(json.backend);
     dispatch({ type: "transcript.add", entry: { id: makeId(), role: "assistant", text: json.reply_text } });
     dispatch({ type: "status.set", status: "speaking" });
-    await speakChunks(json.chunks);
-    dispatch({ type: "status.set", status: "listening" });
+    await speakChunks(json.chunks, requestAbortController, turnId);
+    if (speechAbortRef.current === requestAbortController && turnCounterRef.current === turnId) {
+      dispatch({ type: "status.set", status: "listening" });
+    }
   }
 
-  async function speakChunks(chunks: string[]) {
-    if (state.isMuted) {
+  async function speakChunks(chunks: string[], requestAbortController: AbortController, turnId: number) {
+    if (stateRef.current.isMuted) {
       return;
     }
     for (const chunk of chunks) {
+      if (speechAbortRef.current !== requestAbortController || turnCounterRef.current !== turnId) {
+        return;
+      }
       await new Promise<void>((resolve) => {
         const utterance = new SpeechSynthesisUtterance(chunk);
         activeUtterances.current.push(utterance);
@@ -290,6 +314,8 @@ export function VoiceConsole() {
 
   function cancelCurrentSpeech() {
     speechAbortRef.current?.abort();
+    speechAbortRef.current = null;
+    turnCounterRef.current += 1;
     activeUtterances.current = [];
     window.speechSynthesis.cancel();
   }
@@ -302,8 +328,9 @@ export function VoiceConsole() {
       await maybeRoom.disconnect();
       roomRef.current = null;
     }
-    if (state.sessionId) {
-      await fetch(`${API_BASE}/v1/session/${state.sessionId}`, { method: "DELETE" }).catch(() => undefined);
+    const activeSessionId = stateRef.current.sessionId;
+    if (activeSessionId) {
+      await fetch(`${API_BASE}/v1/session/${activeSessionId}`, { method: "DELETE" }).catch(() => undefined);
     }
     dispatch({ type: "session.ended" });
   }

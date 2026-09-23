@@ -41,6 +41,14 @@ def test_session_creation_requires_localhost_origin() -> None:
 
     assert response.status_code == 403
 
+    sneaky = client.post(
+        "/v1/session",
+        json={"consent": True, "mode": "mock"},
+        headers={"origin": "http://localhost.evil.com"},
+    )
+
+    assert sneaky.status_code == 403
+
 
 def test_session_creation_and_mock_turn_flow() -> None:
     client = build_client()
