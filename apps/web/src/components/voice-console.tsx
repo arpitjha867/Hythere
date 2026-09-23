@@ -78,6 +78,7 @@ export function VoiceConsole() {
   const recognitionRef = useRef<BrowserRecognition | null>(null);
   const activeUtterances = useRef<SpeechSynthesisUtterance[]>([]);
   const turnCounterRef = useRef(0);
+  const shouldAutoListenRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
@@ -103,7 +104,7 @@ export function VoiceConsole() {
 
   useEffect(() => {
     return () => {
-      window.speechSynthesis.cancel();
+      window.speechSynthesis?.cancel();
       recognitionRef.current?.stop();
     };
   }, []);
@@ -164,6 +165,7 @@ export function VoiceConsole() {
       await connectLiveKit(session);
       return;
     }
+    shouldAutoListenRef.current = true;
     startBrowserRecognition();
   }
 
@@ -177,8 +179,9 @@ export function VoiceConsole() {
         dispatch({ type: "status.set", status: "listening" });
       });
       room.on(livekit.RoomEvent.Disconnected, () => {
-        setLiveKitSummary("Disconnected");
-        const activeSessionId = stateRef.current.sessionId;
+          shouldAutoListenRef.current = false;
+          setLiveKitSummary("Disconnected");
+          const activeSessionId = stateRef.current.sessionId;
         if (activeSessionId) {
           void fetch(`${API_BASE}/v1/session/${activeSessionId}`, { method: "DELETE" }).catch(() => undefined);
         }
@@ -230,6 +233,9 @@ export function VoiceConsole() {
       const currentState = stateRef.current;
       if (currentState.sessionId && currentState.status !== "speaking") {
         dispatch({ type: "status.set", status: "listening" });
+        if (shouldAutoListenRef.current) {
+          recognition.start();
+        }
       }
     };
     recognitionRef.current = recognition;
@@ -307,7 +313,7 @@ export function VoiceConsole() {
         utterance.pitch = 1;
         utterance.onend = () => resolve();
         utterance.onerror = () => resolve();
-        window.speechSynthesis.speak(utterance);
+        window.speechSynthesis?.speak(utterance);
       });
     }
   }
@@ -317,10 +323,11 @@ export function VoiceConsole() {
     speechAbortRef.current = null;
     turnCounterRef.current += 1;
     activeUtterances.current = [];
-    window.speechSynthesis.cancel();
+    window.speechSynthesis?.cancel();
   }
 
   async function stopSession() {
+    shouldAutoListenRef.current = false;
     cancelCurrentSpeech();
     recognitionRef.current?.stop();
     const maybeRoom = roomRef.current as { disconnect?: () => Promise<void> | void } | null;

@@ -160,6 +160,14 @@ HYTHERE_LIVEKIT_API_SECRET=YOUR_SECRET
 
 Then restart the API. The web UI will enable **LiveKit room** mode.
 
+If you later put the API behind a trusted backend or proxy in production, also set:
+
+```env
+HYTHERE_SESSION_AUTH_SECRET=CHOOSE_A_LONG_RANDOM_SECRET
+```
+
+That trusted layer must send `X-Hythere-Session-Auth` to the FastAPI service. The local browser demo does **not** need this because it uses the explicit localhost-only dev mode instead.
+
 ## Exact test commands
 
 ### Web

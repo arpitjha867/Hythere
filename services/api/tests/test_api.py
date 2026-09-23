@@ -103,12 +103,14 @@ def test_livekit_token_is_scoped_to_generated_room() -> None:
         HYTHERE_LIVEKIT_URL="wss://example.livekit.cloud",
         HYTHERE_LIVEKIT_API_KEY="test_key",
         HYTHERE_LIVEKIT_API_SECRET="test_secret",
+        HYTHERE_SESSION_AUTH_SECRET="trusted-secret",
+        HYTHERE_ALLOW_LOCAL_DEV_AUTH="false",
     )
 
     response = client.post(
         "/v1/session",
         json={"consent": True, "mode": "livekit"},
-        headers={"origin": "http://localhost:3000"},
+        headers={"x-hythere-session-auth": "trusted-secret"},
     )
 
     assert response.status_code == 200

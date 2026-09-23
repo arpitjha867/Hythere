@@ -13,6 +13,7 @@ class ApiSettings(BaseSettings):
     app_env: Literal["development", "production", "test"] = "development"
     cors_origins: str = "http://127.0.0.1:3000,http://localhost:3000"
     allow_local_dev_auth: bool = False
+    session_auth_secret: str | None = None
     livekit_url: str | None = None
     livekit_api_key: str | None = None
     livekit_api_secret: str | None = None

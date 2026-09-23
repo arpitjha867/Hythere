@@ -18,6 +18,16 @@ def enforce_local_dev_auth(request: Request, settings: ApiSettings) -> None:
             detail="Local dev auth is enabled only for localhost origins.",
         )
 
+    expected_secret = settings.session_auth_secret
+    if expected_secret:
+        provided_secret = request.headers.get("x-hythere-session-auth")
+        if provided_secret == expected_secret:
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Missing or invalid trusted session auth header.",
+        )
+
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Session creation is closed until secure auth and configuration are enabled.",
