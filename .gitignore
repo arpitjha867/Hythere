@@ -1,0 +1,17 @@
+node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/coverage/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
+.env.*
+!.env.example
+!.env.local.example
+.DS_Store
+recordings/
+logs/
+*.log
+coverage/
