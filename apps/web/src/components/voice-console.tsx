@@ -68,21 +68,28 @@ export function VoiceConsole() {
   const [showTranscript, setShowTranscript] = useState(true);
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [mode, setMode] = useState<"mock" | "livekit">("mock");
+  const [activeSessionMode, setActiveSessionMode] = useState<"mock" | "livekit" | null>(null);
   const [micPermission, setMicPermission] = useState("unknown");
   const [manualTranscript, setManualTranscript] = useState("");
   const [liveKitSummary, setLiveKitSummary] = useState("Not connected");
   const [backendSummary, setBackendSummary] = useState("mock");
   const roomRef = useRef<unknown>(null);
   const stateRef = useRef(state);
+  const activeSessionModeRef = useRef<"mock" | "livekit" | null>(null);
   const speechAbortRef = useRef<AbortController | null>(null);
   const recognitionRef = useRef<BrowserRecognition | null>(null);
   const activeUtterances = useRef<SpeechSynthesisUtterance[]>([]);
   const turnCounterRef = useRef(0);
   const shouldAutoListenRef = useRef(false);
+  const recognitionErroredRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    activeSessionModeRef.current = activeSessionMode;
+  }, [activeSessionMode]);
 
   useEffect(() => {
     void fetch(`${API_BASE}/v1/config`)
@@ -160,8 +167,10 @@ export function VoiceConsole() {
     }
     const session = (await response.json()) as SessionResponse;
     dispatch({ type: "session.started", sessionId: session.session_id });
+    setActiveSessionMode(session.mode);
 
     if (session.mode === "livekit") {
+      shouldAutoListenRef.current = false;
       await connectLiveKit(session);
       return;
     }
@@ -181,9 +190,10 @@ export function VoiceConsole() {
       room.on(livekit.RoomEvent.Disconnected, () => {
           shouldAutoListenRef.current = false;
           setLiveKitSummary("Disconnected");
+          setActiveSessionMode(null);
           const activeSessionId = stateRef.current.sessionId;
-        if (activeSessionId) {
-          void fetch(`${API_BASE}/v1/session/${activeSessionId}`, { method: "DELETE" }).catch(() => undefined);
+          if (activeSessionId) {
+            void fetch(`${API_BASE}/v1/session/${activeSessionId}`, { method: "DELETE" }).catch(() => undefined);
         }
         dispatch({ type: "session.ended" });
       });
@@ -214,6 +224,7 @@ export function VoiceConsole() {
     }
     recognitionRef.current?.stop();
     const recognition = new Recognition();
+    recognitionErroredRef.current = false;
     recognition.lang = "hi-IN";
     recognition.continuous = false;
     recognition.interimResults = false;
@@ -227,13 +238,19 @@ export function VoiceConsole() {
       }
     };
     recognition.onerror = (event) => {
+      recognitionErroredRef.current = true;
+      shouldAutoListenRef.current = false;
       dispatch({ type: "error.set", error: `Speech recognition error: ${event.error}` });
     };
     recognition.onend = () => {
       const currentState = stateRef.current;
-      if (currentState.sessionId && currentState.status !== "speaking") {
+      if (
+        currentState.sessionId &&
+        currentState.status !== "speaking" &&
+        activeSessionModeRef.current === "mock"
+      ) {
         dispatch({ type: "status.set", status: "listening" });
-        if (shouldAutoListenRef.current) {
+        if (shouldAutoListenRef.current && !recognitionErroredRef.current) {
           recognition.start();
         }
       }
@@ -245,7 +262,7 @@ export function VoiceConsole() {
 
   async function handleTranscript(result: RecognitionResult) {
     const sessionId = stateRef.current.sessionId;
-    if (!sessionId) return;
+    if (!sessionId || activeSessionModeRef.current !== "mock") return;
     const transcript = result.finalText.trim();
     if (!transcript) return;
 
@@ -328,6 +345,7 @@ export function VoiceConsole() {
 
   async function stopSession() {
     shouldAutoListenRef.current = false;
+    recognitionErroredRef.current = false;
     cancelCurrentSpeech();
     recognitionRef.current?.stop();
     const maybeRoom = roomRef.current as { disconnect?: () => Promise<void> | void } | null;
@@ -339,14 +357,27 @@ export function VoiceConsole() {
     if (activeSessionId) {
       await fetch(`${API_BASE}/v1/session/${activeSessionId}`, { method: "DELETE" }).catch(() => undefined);
     }
+    setActiveSessionMode(null);
     dispatch({ type: "session.ended" });
   }
 
   async function submitManualTranscript() {
-    if (!manualTranscript.trim()) return;
+    if (!manualTranscript.trim() || activeSessionMode !== "mock") return;
     await handleTranscript({ finalText: manualTranscript });
     setManualTranscript("");
   }
+
+  function listenAgain() {
+    if (activeSessionMode !== "mock") {
+      setLiveKitSummary("LiveKit mode listens through the room connection, not the browser transcript helper.");
+      return;
+    }
+    shouldAutoListenRef.current = true;
+    recognitionErroredRef.current = false;
+    startBrowserRecognition();
+  }
+
+  const canUseBrowserTranscript = activeSessionMode === "mock";
 
   return (
     <main className={styles.page}>
@@ -409,7 +440,11 @@ export function VoiceConsole() {
                 <button className={styles.buttonGhost} onClick={() => dispatch({ type: "mute.toggle" })}>
                   {state.isMuted ? "Unmute" : "Mute"}
                 </button>
-                <button className={styles.buttonGhost} onClick={startBrowserRecognition}>
+                <button
+                  className={styles.buttonGhost}
+                  disabled={!canUseBrowserTranscript}
+                  onClick={listenAgain}
+                >
                   Listen again
                 </button>
               </div>
@@ -446,13 +481,18 @@ export function VoiceConsole() {
                 <span className={styles.label}>Manual transcript fallback</span>
                 <textarea
                   className={styles.textarea}
+                  disabled={!canUseBrowserTranscript}
                   value={manualTranscript}
                   onChange={(event) => setManualTranscript(event.target.value)}
                   placeholder="If browser speech recognition is unavailable, type what you said here in Hindi or Hinglish."
                 />
               </label>
               <div className={styles.buttons}>
-                <button className={styles.buttonSecondary} onClick={() => void submitManualTranscript()}>
+                <button
+                  className={styles.buttonSecondary}
+                  disabled={!canUseBrowserTranscript}
+                  onClick={() => void submitManualTranscript()}
+                >
                   Send manual turn
                 </button>
                 <button className={styles.buttonGhost} onClick={() => dispatch({ type: "transcript.clear" })}>
