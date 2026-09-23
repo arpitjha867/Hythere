@@ -1,0 +1,29 @@
+:root {
+  --background: #fff9f3;
+  --foreground: #1f2937;
+  --surface: #ffffff;
+  --surface-alt: #fff1e7;
+  --border: #f1d3bd;
+  --accent: #eb6b2f;
+  --accent-soft: #ffd8c2;
+  --ok: #0f766e;
+  --warn: #b45309;
+  --error: #b91c1c;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: linear-gradient(180deg, #fff7ef 0%, #fffdfb 100%);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+}
