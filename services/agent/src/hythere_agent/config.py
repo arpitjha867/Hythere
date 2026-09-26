@@ -10,13 +10,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="HYTHERE_", case_sensitive=False, extra="ignore")
 
+    livekit_url: str | None = None
+    livekit_api_key: str | None = None
+    livekit_api_secret: str | None = None
     mock_llm_backend: Literal["mock", "sarvam"] = "mock"
     sarvam_api_subscription_key: str | None = None
     sarvam_model: str = "sarvam-105b"
     sarvam_stt_model: str = "saaras:v4"
     sarvam_stt_mode: str = "codemix"
+    sarvam_stt_language: str = "hi-IN"
     sarvam_tts_model: str = "bulbul:v3"
     sarvam_tts_speaker: str = "shubh"
+    sarvam_tts_language: str = "hi-IN"
     distress_resource_name: str | None = None
     distress_resource_contact: str | None = None
     distress_resource_region: str | None = None

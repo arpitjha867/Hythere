@@ -79,6 +79,7 @@ export function VoiceConsole() {
   const speechAbortRef = useRef<AbortController | null>(null);
   const recognitionRef = useRef<BrowserRecognition | null>(null);
   const activeUtterances = useRef<SpeechSynthesisUtterance[]>([]);
+  const remoteAudioElementsRef = useRef<HTMLMediaElement[]>([]);
   const turnCounterRef = useRef(0);
   const shouldAutoListenRef = useRef(false);
   const recognitionErroredRef = useRef(false);
@@ -113,6 +114,7 @@ export function VoiceConsole() {
     return () => {
       window.speechSynthesis?.cancel();
       recognitionRef.current?.stop();
+      clearRemoteAudioElements();
     };
   }, []);
 
@@ -142,6 +144,11 @@ export function VoiceConsole() {
       });
       return false;
     }
+  }
+
+  function clearRemoteAudioElements() {
+    remoteAudioElementsRef.current.forEach((element) => element.remove());
+    remoteAudioElementsRef.current = [];
   }
 
   async function startSession() {
@@ -190,6 +197,7 @@ export function VoiceConsole() {
       room.on(livekit.RoomEvent.Disconnected, () => {
           shouldAutoListenRef.current = false;
           setLiveKitSummary("Disconnected");
+          clearRemoteAudioElements();
           setActiveSessionMode(null);
           const activeSessionId = stateRef.current.sessionId;
           if (activeSessionId) {
@@ -197,13 +205,40 @@ export function VoiceConsole() {
         }
         dispatch({ type: "session.ended" });
       });
-      room.on(livekit.RoomEvent.TrackSubscribed, async () => {
+      room.on(livekit.RoomEvent.TrackSubscribed, async (track) => {
+        if (track.kind === "audio") {
+          const audioElement = track.attach();
+          audioElement.autoplay = true;
+          audioElement.setAttribute("aria-hidden", "true");
+          audioElement.style.display = "none";
+          document.body.appendChild(audioElement);
+          remoteAudioElementsRef.current.push(audioElement);
+        }
         dispatch({ type: "status.set", status: "speaking" });
         try {
           await room.startAudio();
         } catch {
           setLiveKitSummary("Connected. Tap the page once if autoplay is blocked.");
         }
+      });
+      room.on(livekit.RoomEvent.TrackUnsubscribed, (track) => {
+        track.detach().forEach((element) => element.remove());
+        remoteAudioElementsRef.current = remoteAudioElementsRef.current.filter((element) =>
+          element.isConnected,
+        );
+      });
+      room.on(livekit.RoomEvent.TranscriptionReceived, (segments, participant) => {
+        const finalSegments = segments.filter((segment) => segment.final);
+        if (finalSegments.length === 0) return;
+
+        dispatch({
+          type: "transcript.add",
+          entry: {
+            id: finalSegments.map((segment) => segment.id).join("-"),
+            role: participant?.identity === room.localParticipant.identity ? "user" : "assistant",
+            text: finalSegments.map((segment) => segment.text).join(" "),
+          },
+        });
       });
       await room.connect(session.livekit_url ?? "", session.livekit_token ?? "");
       await room.localParticipant.setMicrophoneEnabled(true);
@@ -353,6 +388,7 @@ export function VoiceConsole() {
       await maybeRoom.disconnect();
       roomRef.current = null;
     }
+    clearRemoteAudioElements();
     const activeSessionId = stateRef.current.sessionId;
     if (activeSessionId) {
       await fetch(`${API_BASE}/v1/session/${activeSessionId}`, { method: "DELETE" }).catch(() => undefined);
@@ -425,7 +461,11 @@ export function VoiceConsole() {
                 >
                   <option value="mock">Mock / local demo</option>
                   <option value="livekit" disabled={!config?.livekit_enabled}>
-                    LiveKit room
+                    {config
+                      ? config.livekit_enabled
+                        ? "LiveKit room"
+                        : "LiveKit room (not configured)"
+                      : "LiveKit room (checking API config...)"}
                   </option>
                 </select>
               </label>

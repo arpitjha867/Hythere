@@ -1,0 +1,23 @@
+Hythere: Local Development Commands (PowerShell)
+
+Run the backend, LiveKit agent (for live voice mode), and frontend in separate terminals from the repository root.
+
+BACKEND
+
+    .\.venv\Scripts\Activate.ps1
+    $env:PYTHONPATH = "services/api/src;services/agent/src"
+    python -m uvicorn hythere_api.main:app --reload --app-dir .\services\api\src --env-file .\services\api\.env --host 127.0.0.1 --port 8000
+
+Backend URL: http://127.0.0.1:8000
+
+LIVEKIT AGENT (required for LiveKit voice conversations)
+
+    .\.venv\Scripts\Activate.ps1
+    $env:PYTHONPATH = "services/api/src;services/agent/src"
+    python -m hythere_agent.livekit_worker start
+
+FRONTEND
+
+    npm --prefix apps/web run dev
+
+Frontend URL: http://127.0.0.1:3000

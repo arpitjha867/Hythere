@@ -29,7 +29,16 @@ A clearly labeled **mock demo mode** works with:
 - transcript clearing
 - configurable distress-resource notice
 
-### Prepared but not fully verified live path
+### Live voice path
+
+The LiveKit path now includes a separate voice worker that joins each session room and runs:
+
+- Silero VAD
+- Sarvam streaming speech-to-text (`saaras:v4`, Hindi/Hinglish code-mix)
+- Sarvam LLM (`sarvam-105b` by default)
+- Sarvam text-to-speech (`bulbul:v3` by default)
+
+It still requires valid LiveKit and Sarvam credentials and a running worker process. A real provider smoke test is required before production use.
 
 The code also includes:
 
@@ -49,7 +58,7 @@ The code also includes:
 
 ## Important truth about the current MVP
 
-The **fully server-hosted VAD -> STT -> Sarvam LLM -> TTS LiveKit worker is not fully verified in this sandbox**, because no real credentials were available here and the official docs domains were blocked from direct fetches during implementation.
+The **LiveKit voice worker is implemented but not verified against a real end-to-end conversation here**. LiveKit room/token wiring and the worker/plugin APIs are covered locally; real Sarvam/LiveKit credentials are needed for a live speech smoke test.
 
 What **was** verified from installable official SDK packages:
 
@@ -63,7 +72,7 @@ What **was** verified from installable official SDK packages:
 So:
 
 - the **mock path is working and testable now**
-- the **live provider path is wired for the real SDKs**
+- the **live path requires the API, web app, and LiveKit agent worker to be running together**
 - you should still run live smoke checks with your own credentials before calling it production-ready
 
 ## Easy local setup
@@ -109,10 +118,19 @@ Leave Sarvam and LiveKit credentials empty for the mock demo.
 
 ```bash
 source .venv/bin/activate
-PYTHONPATH=services/api/src:services/agent/src uvicorn hythere_api.main:app --reload --app-dir services/api/src --host 127.0.0.1 --port 8000
+PYTHONPATH=services/api/src:services/agent/src uvicorn hythere_api.main:app --reload --app-dir services/api/src --env-file services/api/.env --host 127.0.0.1 --port 8000
 ```
 
-### 6) Start the web app
+### 6) Start the LiveKit agent (for live voice mode)
+
+In another terminal, with valid LiveKit and Sarvam credentials in `services/api/.env`:
+
+```bash
+source .venv/bin/activate
+PYTHONPATH=services/api/src:services/agent/src python -m hythere_agent.livekit_worker start
+```
+
+### 7) Start the web app
 
 In another terminal:
 
@@ -148,7 +166,7 @@ Then restart the API.
 
 This still does **not** prove live Sarvam STT/TTS quality or LiveKit room orchestration. It only proves the server-side Sarvam chat call.
 
-### Optional LiveKit room token path
+### LiveKit voice conversation
 
 Add these to `services/api/.env`:
 
@@ -158,7 +176,7 @@ HYTHERE_LIVEKIT_API_KEY=YOUR_KEY
 HYTHERE_LIVEKIT_API_SECRET=YOUR_SECRET
 ```
 
-Then restart the API. The web UI will enable **LiveKit room** mode.
+Set `HYTHERE_SARVAM_API_SUBSCRIPTION_KEY` as well, then start/restart the API and the LiveKit agent worker. The web UI will enable **LiveKit room** mode; pause after each spoken turn and the agent will reply with audio.
 
 If you later put the API behind a trusted backend or proxy in production, also set:
 

@@ -4,7 +4,7 @@ This repository is designed for one simple deployment shape:
 
 - **Web**: Next.js app on HTTPS
 - **API**: FastAPI on HTTPS
-- **Agent / pipeline worker**: long-running Python process on a VPS or VM
+- **Agent / pipeline worker**: long-running Python process on a VPS or VM, or the included Compose `agent` service
 - **Media transport**: LiveKit Cloud for production WebRTC rooms
 
 Do **not** run the long-running voice worker inside a short-lived serverless function.
@@ -29,6 +29,12 @@ cp services/api/.env.example services/api/.env
 docker compose up --build
 ```
 
+To run the LiveKit voice worker, configure LiveKit and Sarvam credentials in `services/api/.env` and start the `livekit` profile:
+
+```bash
+docker compose --profile livekit up --build
+```
+
 ## Health and smoke checks
 
 After deploy, verify:
@@ -43,9 +49,10 @@ Then run a browser smoke test:
 1. Open the site over HTTPS.
 2. Confirm microphone permission works.
 3. Confirm the mock mode starts and ends cleanly.
-4. If LiveKit and provider credentials are configured, test two separate browser sessions.
-5. Interrupt the assistant mid-playback and confirm old playback stops.
-6. Test permission denial, provider failure, and disconnect/reconnect.
+4. Confirm the LiveKit agent worker is running before testing live voice mode.
+5. If LiveKit and provider credentials are configured, test two separate browser sessions.
+6. Interrupt the assistant mid-playback and confirm old playback stops.
+7. Test permission denial, provider failure, and disconnect/reconnect.
 
 ## Reverse proxy notes
 

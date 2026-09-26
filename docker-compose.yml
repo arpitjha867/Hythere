@@ -13,6 +13,15 @@ services:
       timeout: 5s
       retries: 5
 
+  agent:
+    profiles: ["livekit"]
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    env_file:
+      - services/api/.env
+    command: ["python", "-m", "hythere_agent.livekit_worker", "start"]
+
   web:
     build:
       context: .

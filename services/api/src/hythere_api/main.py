@@ -6,8 +6,9 @@ import secrets
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from livekit.api import AccessToken, VideoGrants
+from livekit.api import AccessToken, RoomAgentDispatch, RoomConfiguration, VideoGrants
 
+from hythere_agent import LIVEKIT_AGENT_NAME
 from hythere_agent.config import AgentSettings
 from hythere_agent.errors import ProviderError, SessionLimitError, SessionNotFoundError
 from hythere_agent.pipeline import CompanionPipeline
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
                     .with_name(identity)
                     .with_ttl(dt.timedelta(seconds=current.session_token_ttl_seconds))
                     .with_grants(VideoGrants(room_join=True, room=room_name, can_publish=True, can_subscribe=True, can_publish_data=True))
+                    .with_room_config(RoomConfiguration(agents=[RoomAgentDispatch(agent_name=LIVEKIT_AGENT_NAME)]))
                     .to_jwt()
                 )
                 return SessionCreateResponse(

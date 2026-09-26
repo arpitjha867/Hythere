@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from importlib import reload
 
+import jwt
 from fastapi.testclient import TestClient
 from livekit.api import TokenVerifier
 
@@ -120,3 +121,5 @@ def test_livekit_token_is_scoped_to_generated_room() -> None:
     assert claims.video.room_join is True
     assert claims.video.room == payload["livekit_room"]
     assert claims.identity == payload["livekit_identity"]
+    token_payload = jwt.decode(payload["livekit_token"], options={"verify_signature": False})
+    assert token_payload["roomConfig"]["agents"][0]["agentName"] == "hythere-voice"
